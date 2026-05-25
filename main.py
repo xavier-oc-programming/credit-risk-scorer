@@ -249,8 +249,12 @@ def score_application(application: CreditApplication) -> RiskScore:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@app.get('/')
+@app.get('/', summary='API entry point', tags=['System'])
 def root():
+    """
+    The root of the API. Returns links to the interactive docs and health check.
+    If you're a human, head to **/docs** for the full interactive API explorer.
+    """
     return {
         'message': 'Credit Risk Scoring API',
         'docs': '/docs',
