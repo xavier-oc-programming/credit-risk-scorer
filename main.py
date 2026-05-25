@@ -162,14 +162,14 @@ class CreditApplication(BaseModel):
 
 class RiskScore(BaseModel):
     """Credit risk assessment output."""
-    probability_of_default: float
-    risk_score: int
-    risk_band: str
-    decision: str
-    risk_factors: list[str]
-    protective_factors: list[str]
-    model_used: str
-    shap_values_raw: dict
+    probability_of_default: float = Field(..., description='Estimated probability the applicant will default, from 0 (no risk) to 1 (certain default)')
+    risk_score: int = Field(..., description='Probability mapped to a 0–100 scale. Higher means riskier.')
+    risk_band: str = Field(..., description='Risk category: Low, Medium, High, or Very High')
+    decision: str = Field(..., description='Recommended action: Approve, Review, Additional checks, or Decline')
+    risk_factors: list[str] = Field(..., description='Top reasons the model considers this application risky, in plain English')
+    protective_factors: list[str] = Field(..., description='Top factors working in the applicant\'s favour, in plain English')
+    model_used: str = Field(..., description='Name of the model that produced this score')
+    shap_values_raw: dict = Field(..., description='Raw SHAP values per feature — the numbers behind the plain-English explanation. Positive = pushes toward default, negative = pushes away.')
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
