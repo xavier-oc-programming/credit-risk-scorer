@@ -1,17 +1,30 @@
+import pytest
 from fastapi.testclient import TestClient
 from main import app
 
-client = TestClient(app)
+
+@pytest.fixture(scope='session')
+def client():
+    # Context manager triggers FastAPI lifespan (model loading) at session start.
+    with TestClient(app) as c:
+        yield c
 
 
-def test_health_endpoint():
+@pytest.fixture(scope='session')
+def model_loaded(client):
+    """True if the model loaded successfully — used to skip scoring tests in CI."""
+    return client.get('/health').json().get('model_loaded', False)
+
+
+def test_health_endpoint(client):
     response = client.get('/health')
     assert response.status_code == 200
-    assert 'status' in response.json()
     assert response.json()['status'] == 'ok'
 
 
-def test_score_low_risk_applicant():
+def test_score_low_risk_applicant(client, model_loaded):
+    if not model_loaded:
+        pytest.skip('models/ not present — run train.py first')
     payload = {
         'duration': 12, 'credit_amount': 2000,
         'installment_commitment': 2, 'age': 45,
@@ -26,12 +39,13 @@ def test_score_low_risk_applicant():
     assert 'risk_score' in data
     assert 'risk_band' in data
     assert 'risk_factors' in data
-    assert data['risk_score'] >= 0
-    assert data['risk_score'] <= 100
+    assert 0 <= data['risk_score'] <= 100
     assert data['risk_band'] in ['Low', 'Medium', 'High', 'Very High']
 
 
-def test_score_high_risk_applicant():
+def test_score_high_risk_applicant(client, model_loaded):
+    if not model_loaded:
+        pytest.skip('models/ not present — run train.py first')
     payload = {
         'duration': 48, 'credit_amount': 15000,
         'installment_commitment': 4, 'age': 22,
@@ -41,16 +55,17 @@ def test_score_high_risk_applicant():
     }
     response = client.post('/score', json=payload)
     assert response.status_code == 200
-    data = response.json()
-    assert data['risk_score'] > 40
+    assert response.json()['risk_score'] > 40
 
 
-def test_score_invalid_input():
+def test_score_invalid_input(client):
     response = client.post('/score', json={'duration': 12})
     assert response.status_code == 422
 
 
-def test_batch_score():
+def test_batch_score(client, model_loaded):
+    if not model_loaded:
+        pytest.skip('models/ not present — run train.py first')
     payload = [
         {
             'duration': 12, 'credit_amount': 2000, 'installment_commitment': 2,
@@ -70,16 +85,16 @@ def test_batch_score():
     assert len(response.json()) == 2
 
 
-def test_model_info():
+def test_model_info(client):
     response = client.get('/api/model-info')
     assert response.status_code == 200
 
 
-def test_feature_importance():
+def test_feature_importance(client):
     response = client.get('/api/feature-importance')
     assert response.status_code == 200
 
 
-def test_risk_bands():
+def test_risk_bands(client):
     response = client.get('/api/risk-bands')
     assert response.status_code == 200
