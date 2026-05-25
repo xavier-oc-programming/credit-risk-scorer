@@ -6,8 +6,6 @@
 # Run: docker-compose up
 # Stop: docker-compose down
 
-version: '3.8'
-
 services:
   api:
     build: .
