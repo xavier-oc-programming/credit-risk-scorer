@@ -258,8 +258,15 @@ def root():
     }
 
 
-@app.get('/health')
+@app.get('/health', summary='Health check', tags=['System'])
 def health():
+    """
+    Check whether the API is running and the model is loaded.
+
+    Returns `model_loaded: true` when the scoring model is ready to accept
+    requests. If `model_loaded` is false, run `python train.py` to generate
+    the model files, then restart the server.
+    """
     return {
         'status': 'ok',
         'model_loaded': MODEL_LOADED,
@@ -267,61 +274,110 @@ def health():
     }
 
 
-@app.get('/demo', response_class=HTMLResponse)
+@app.get('/demo', response_class=HTMLResponse, summary='Interactive demo UI', tags=['System'])
 def demo(request: Request):
+    """
+    Open a simple web form where you can fill in a loan application and see
+    the risk score instantly — no coding required. Good for a quick demo or
+    to get a feel for how the model behaves across different applicant profiles.
+    """
     return templates.TemplateResponse('index.html', {'request': request})
 
 
-@app.post('/score', response_model=RiskScore)
+@app.post('/score', response_model=RiskScore, summary='Score a single application', tags=['Scoring'])
 def score(application: CreditApplication):
     """
-    Score a credit application and return a risk assessment.
+    Submit one loan application and get back an instant risk assessment.
 
-    Example request:
+    The response tells you:
+    - **probability_of_default** — the model's estimated chance the applicant won't repay (0 to 1)
+    - **risk_score** — that probability mapped to 0–100 (higher = riskier)
+    - **risk_band** — Low / Medium / High / Very High
+    - **decision** — Approve / Review / Additional checks / Decline
+    - **risk_factors** — the top reasons the model flagged this application as risky
+    - **protective_factors** — the top reasons working in the applicant's favour
+    - **shap_values_raw** — the raw numbers behind the explanation (for technical users)
+
+    Example — a high-risk applicant:
+    ```json
     {
-      "duration": 24,
-      "credit_amount": 5000,
-      "installment_commitment": 3,
-      "age": 35,
-      "existing_credits": 1,
-      "checking_status": "0<=X<200",
-      "credit_history": "existing paid",
+      "duration": 48,
+      "credit_amount": 15000,
+      "installment_commitment": 4,
+      "age": 22,
+      "existing_credits": 3,
+      "checking_status": "no checking",
+      "credit_history": "delayed previously",
       "purpose": "new car",
-      "savings_status": "<100",
-      "employment": "1<=X<4"
+      "savings_status": "no known savings",
+      "employment": "<1"
     }
+    ```
     """
     return score_application(application)
 
 
-@app.post('/score/batch', response_model=list[RiskScore])
+@app.post('/score/batch', response_model=list[RiskScore], summary='Score up to 100 applications at once', tags=['Scoring'])
 def score_batch(applications: list[CreditApplication]):
     """
-    Score up to 100 credit applications in a single request.
+    Submit a list of loan applications (up to 100) and get back a risk
+    assessment for each one in a single API call.
 
-    Returns a list of risk assessments in the same order as the input.
-    Useful for bulk loan decisioning workflows.
+    The response is a list in the same order as the input — the first result
+    corresponds to the first application, and so on. Useful when a bank needs
+    to process a queue of applications in bulk rather than one at a time.
     """
     if len(applications) > 100:
         raise HTTPException(status_code=400, detail='Maximum 100 applications per batch')
     return [score_application(app) for app in applications]
 
 
-@app.get('/api/model-info')
+@app.get('/api/model-info', summary='Model training results', tags=['Model'])
 def model_info():
+    """
+    Returns the performance metrics for all three models trained during the
+    last run of `train.py` (Logistic Regression, Random Forest, XGBoost).
+
+    The primary selection metric is `cost_weighted_score`, not accuracy —
+    because in credit lending, approving a bad loan costs roughly 5× more
+    than rejecting a good one. The model with the highest cost-weighted score
+    is the one currently serving predictions.
+    """
     return {
         'primary_metric': 'cost_weighted_score',
         'models': model_metrics,
     }
 
 
-@app.get('/api/feature-importance')
+@app.get('/api/feature-importance', summary='Top 10 factors driving predictions', tags=['Model'])
 def feature_importance():
+    """
+    Returns the 10 features that have the biggest influence on the model's
+    predictions, ranked by their average SHAP impact across all test applicants.
+
+    SHAP (SHapley Additive exPlanations) measures how much each feature
+    pushes a prediction up or down compared to the average. A high value here
+    means the feature frequently shifts the risk score by a large amount —
+    regardless of whether it increases or reduces risk.
+    """
     return shap_feature_importance
 
 
-@app.get('/api/risk-bands')
+@app.get('/api/risk-bands', summary='Risk band thresholds and decisions', tags=['Model'])
 def risk_bands():
+    """
+    Returns the four risk bands and the business decision associated with each.
+
+    The risk score (0–100) is divided into bands based on the probability of
+    default. Each band maps to a recommended action:
+    - **Low (0–20)** → Approve
+    - **Medium (20–40)** → Review
+    - **High (40–60)** → Additional checks
+    - **Very High (60–100)** → Decline
+
+    These thresholds reflect standard credit risk practice and can be adjusted
+    to suit a lender's risk appetite.
+    """
     return [
         {
             'min': low,
