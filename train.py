@@ -49,12 +49,68 @@ PLOTS_DIR.mkdir(exist_ok=True)
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 print('Loading German Credit dataset...')
-# parser='pandas' uses pandas to parse the ARFF file instead of the default
-# liac-arff parser — significantly faster on sklearn 1.3+.
-# The dataset is cached in ~/scikit_learn_data/ after the first download,
-# so subsequent runs are instant regardless of network speed.
-data = fetch_openml('credit-g', version=1, as_frame=True, parser='pandas')
-df = data.frame
+
+def _load_from_uci():
+    """
+    Fallback when OpenML is unreachable. Maps UCI coded values to the same
+    human-readable strings fetch_openml returns so the rest of the script
+    works unchanged.
+    """
+    import requests as _req
+    url = 'https://archive.ics.uci.edu/static/public/144/data.csv'
+    df = pd.read_csv(url)
+    df = df.rename(columns={
+        'Attribute1': 'checking_status', 'Attribute2': 'duration',
+        'Attribute3': 'credit_history',  'Attribute4': 'purpose',
+        'Attribute5': 'credit_amount',   'Attribute6': 'savings_status',
+        'Attribute7': 'employment',      'Attribute8': 'installment_commitment',
+        'Attribute9': 'personal_status', 'Attribute10': 'other_parties',
+        'Attribute11': 'residence_since','Attribute12': 'property_magnitude',
+        'Attribute13': 'age',            'Attribute14': 'other_payment_plans',
+        'Attribute15': 'housing',        'Attribute16': 'existing_credits',
+        'Attribute17': 'job',            'Attribute18': 'num_dependents',
+        'Attribute19': 'own_telephone',  'Attribute20': 'foreign_worker',
+    })
+    value_maps = {
+        'checking_status':     {'A11': '<0', 'A12': '0<=X<200', 'A13': '>=200', 'A14': 'no checking'},
+        'credit_history':      {'A30': 'no credits/all paid', 'A31': 'all paid', 'A32': 'existing paid',
+                                'A33': 'delayed previously', 'A34': 'critical/other existing credit'},
+        'purpose':             {'A40': 'new car', 'A41': 'used car', 'A42': 'furniture/equipment',
+                                'A43': 'radio/tv', 'A44': 'domestic appliance', 'A45': 'repairs',
+                                'A46': 'education', 'A47': 'vacation', 'A48': 'retraining',
+                                'A49': 'business', 'A410': 'other'},
+        'savings_status':      {'A61': '<100', 'A62': '100<=X<500', 'A63': '500<=X<1000',
+                                'A64': '>=1000', 'A65': 'no known savings'},
+        'employment':          {'A71': 'unemployed', 'A72': '<1', 'A73': '1<=X<4',
+                                'A74': '4<=X<7', 'A75': '>=7'},
+        'personal_status':     {'A91': 'male div/sep', 'A92': 'female div/dep/mar',
+                                'A93': 'male single', 'A94': 'male mar/wid', 'A95': 'female single'},
+        'other_parties':       {'A101': 'none', 'A102': 'co applicant', 'A103': 'guarantor'},
+        'property_magnitude':  {'A121': 'real estate', 'A122': 'life insurance',
+                                'A123': 'car', 'A124': 'no known property'},
+        'other_payment_plans': {'A141': 'bank', 'A142': 'stores', 'A143': 'none'},
+        'housing':             {'A151': 'rent', 'A152': 'own', 'A153': 'free'},
+        'job':                 {'A171': 'unskilled resident', 'A172': 'unskilled resident',
+                                'A173': 'skilled', 'A174': 'high qualif/self emp/mgmt'},
+        'own_telephone':       {'A191': 'none', 'A192': 'yes'},
+        'foreign_worker':      {'A201': 'yes', 'A202': 'no'},
+        'class':               {1: 'good', 2: 'bad'},
+    }
+    for col, mapping in value_maps.items():
+        if col in df.columns:
+            df[col] = df[col].map(mapping)
+    return df
+
+# 5s ping to OpenML — fast-fails if the server is down rather than hanging.
+try:
+    import requests as _req
+    _req.get('https://api.openml.org/api/v1/json/dataset/31', timeout=5).raise_for_status()
+    print('OpenML reachable — loading dataset...')
+    data = fetch_openml('credit-g', version=1, as_frame=True, parser='pandas')
+    df = data.frame
+except Exception:
+    print('OpenML unreachable — loading from UCI fallback...')
+    df = _load_from_uci()
 
 print(f'Dataset shape: {df.shape}')
 print(f'\nTarget column: {TARGET_COLUMN}')
