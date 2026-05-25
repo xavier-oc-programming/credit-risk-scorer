@@ -331,13 +331,24 @@ az webapp deployment source config-zip \
 
 ## 11. CI/CD
 
-GitHub Actions runs on every push to `main`:
+GitHub Actions runs on every push to `main` in two sequential jobs:
 
+**test** (~2 min)
 1. Install dependencies from `requirements.txt`
-2. Run `pytest tests/ -v` — tests all API endpoints
+2. Run `pytest tests/ -v` — 5 tests pass, 3 skip if models absent
 3. Check that the FastAPI app imports without error
 
-The pipeline tests endpoint structure and input validation. It does not run `train.py` (which requires the German Credit dataset download and takes several minutes) and does not deploy to Azure (manual deployment via `az` CLI).
+**deploy** (only if tests pass, ~6 min)
+1. Install dependencies
+2. Run `train.py` — trains all three models, saves artefacts to `models/`
+3. Zip the full project including `models/`
+4. Deploy to Azure App Service via `az webapp deploy`
+
+Every push to `main` goes live automatically. The live URL always reflects the current state of the `main` branch.
+
+**Scalability note:** retraining on every deploy is acceptable here because training takes ~2 minutes on a free CI runner. In production — where training might run for hours on GPU hardware — model artefacts would be stored separately in object storage (e.g. Azure Blob Storage or S3) and the deploy job would only push code. A separate pipeline triggered by data changes would handle retraining and upload new artefacts. The scoring tests that currently skip in CI would instead download the latest artefacts from the store and run against them.
+
+**Azure F1 free tier note:** the free tier allows 60 compute-minutes per day. Each full CI/CD run consumes roughly 8 minutes. Avoid pushing more than ~6 times in a day or the app will be throttled until midnight UTC.
 
 ---
 
