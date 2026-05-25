@@ -18,6 +18,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
@@ -392,3 +393,32 @@ def risk_bands():
         }
         for (low, high), info in RISK_BANDS.items()
     ]
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schemas = schema.get('components', {}).get('schemas', {})
+    if 'ValidationError' in schemas:
+        schemas['ValidationError']['description'] = (
+            'Describes a single field validation failure. '
+            '`loc` is the path to the field that failed (e.g. ["body", "duration"]), '
+            '`msg` is a human-readable explanation, and `type` is the error code.'
+        )
+    if 'HTTPValidationError' in schemas:
+        schemas['HTTPValidationError']['description'] = (
+            'Returned with HTTP 422 when the request body fails validation. '
+            'This happens when a required field is missing, a value is out of range, '
+            'or a string field contains an unrecognised value. '
+            'The `detail` array lists every field that failed and why.'
+        )
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
