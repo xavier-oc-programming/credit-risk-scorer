@@ -8,63 +8,23 @@ tech_stack: Python, scikit-learn, SHAP, MLflow, FastAPI, Uvicorn, Docker, Docker
 repo_url: https://github.com/xavier-oc-programming/credit-risk-scorer
 live_url: https://credit-risk-scorer.azurewebsites.net
 demo_url: https://credit-risk-scorer.azurewebsites.net/docs
-short_description: |
-  Credit risk scoring API predicting loan default probability on the German
-  Credit dataset. Three classifiers benchmarked with MLflow experiment tracking;
-  Logistic Regression selected by cost-weighted score. Served via FastAPI with
-  auto-generated OpenAPI docs and plain-English SHAP explanations. Deployed on
-  Azure App Service with GitHub Actions CI/CD.
-full_description: |
-  A production-grade credit risk scoring API trained on the German Credit
-  dataset (1,000 applicants, 20 features). Three classifiers are compared —
-  Logistic Regression, Random Forest, and XGBoost — with every training run
-  tracked in MLflow including hyperparameters, metrics, and model artefacts.
-  Model selection uses a cost-weighted score that reflects the asymmetric
-  business cost of credit lending: approving a bad loan costs 5x more than
-  rejecting a good one. Logistic Regression wins with a cost-weighted score
-  of 0.75, outperforming XGBoost (0.62) and Random Forest (0.55) despite
-  lower raw accuracy — demonstrating why domain-appropriate metrics matter.
+short_description: >
+  Credit risk scoring API on the German Credit dataset. Three classifiers benchmarked with MLflow; Logistic Regression wins by cost-weighted score. FastAPI serves predictions with SHAP explanations. Deployed on Azure App Service via GitHub Actions CI/CD.
+full_description: >
+  A production-grade credit risk scoring API trained on the German Credit dataset (1,000 applicants, 20 features). Three classifiers are compared — Logistic Regression, Random Forest, and XGBoost — with every training run tracked in MLflow including hyperparameters, metrics, and model artefacts. Model selection uses a cost-weighted score that reflects the asymmetric business cost of credit lending: approving a bad loan costs 5x more than rejecting a good one. Logistic Regression wins with a cost-weighted score of 0.75, outperforming XGBoost (0.62) and Random Forest (0.55) despite lower raw accuracy — demonstrating why domain-appropriate metrics matter.
 
-  The winning model is served via FastAPI — chosen over Flask for its
-  API-first design, Pydantic input validation, and auto-generated OpenAPI
-  documentation at /docs. Every prediction returns a risk score (0-100),
-  risk band (Low/Medium/High/Very High), business decision (Approve/Review/
-  Decline), and plain-English SHAP explanations of the factors driving the
-  score — legally relevant in jurisdictions requiring adverse action notices.
+  The winning model is served via FastAPI — chosen over Flask for its API-first design, Pydantic input validation, and auto-generated OpenAPI documentation at /docs. Every prediction returns a risk score (0-100), risk band (Low/Medium/High/Very High), business decision (Approve/Review/Decline), and plain-English SHAP explanations of the factors driving the score — legally relevant in jurisdictions requiring adverse action notices.
 
-  The project runs locally via Docker Compose with two services: the scoring
-  API on port 8000 and the MLflow tracking server on port 5000. A GitHub
-  Actions CI/CD pipeline runs pytest on every push and automatically retrains
-  and deploys to Azure App Service on every merge to main.
+  The project runs locally via Docker Compose with two services: the scoring API on port 8000 and the MLflow tracking server on port 5000. A GitHub Actions CI/CD pipeline runs pytest on every push and automatically retrains and deploys to Azure App Service on every merge to main.
 
-problem: |
-  Demonstrating a complete ML API lifecycle — experiment tracking, model
-  selection by business metric, API-first serving with input validation,
-  multi-container local development, and automated CI/CD deployment — in a
-  finance domain where explainability is a legal requirement, not just a
-  nice-to-have.
+problem: >
+  Demonstrating a complete ML API lifecycle — experiment tracking, model selection by business metric, API-first serving with input validation, multi-container local development, and automated CI/CD deployment — in a finance domain where explainability is a legal requirement, not just a nice-to-have.
 
-solution: |
-  Logistic Regression pipeline (ColumnTransformer preprocessor + classifier)
-  selected by cost-weighted score across three MLflow-tracked training runs.
-  FastAPI serves POST /score and POST /score/batch with Pydantic validation
-  and SHAP explanations via risk_explainer.py. Docker Compose runs API +
-  MLflow server locally. GitHub Actions retrains the model and deploys to
-  Azure App Service on every push to main.
+solution: >
+  Logistic Regression pipeline (ColumnTransformer preprocessor + classifier) selected by cost-weighted score across three MLflow-tracked training runs. FastAPI serves POST /score and POST /score/batch with Pydantic validation and SHAP explanations via risk_explainer.py. Docker Compose runs API + MLflow server locally. GitHub Actions retrains the model and deploys to Azure App Service on every push to main.
 
-challenges: |
-  Class imbalance (70/30 good/bad) requires explicit handling via class_weight
-  — accuracy alone is misleading, and the highest-accuracy model (Random
-  Forest at 76%) ranks last on the cost-weighted metric. The cost-weighted
-  evaluation score must be defined and implemented manually as sklearn has no
-  built-in support for asymmetric error costs. FastAPI's ASGI architecture
-  requires gunicorn with UvicornWorker on Azure App Service rather than the
-  standard gunicorn workers used for Flask/Django.
+challenges: >
+  Class imbalance (70/30 good/bad) requires explicit handling via class_weight — accuracy alone is misleading, and the highest-accuracy model (Random Forest at 76%) ranks last on the cost-weighted metric. The cost-weighted evaluation score must be defined and implemented manually as sklearn has no built-in support for asymmetric error costs. FastAPI's ASGI architecture requires gunicorn with UvicornWorker on Azure App Service rather than the standard gunicorn workers used for Flask/Django.
 
-results: |
-  Logistic Regression: cost-weighted score 0.75, ROC-AUC 0.80, recall 0.87
-  on the bad credit class (the high-cost class). Random Forest: cost-weighted
-  0.55, ROC-AUC 0.79, recall 0.37 — highest accuracy but worst business
-  outcome due to missed defaults. XGBoost: cost-weighted 0.62, ROC-AUC 0.76,
-  recall 0.53. The result illustrates that optimising for accuracy on an
-  imbalanced dataset actively harms the business objective.
+results: >
+  Logistic Regression: cost-weighted score 0.75, ROC-AUC 0.80, recall 0.87 on the bad credit class (the high-cost class). Random Forest: cost-weighted 0.55, ROC-AUC 0.79, recall 0.37 — highest accuracy but worst business outcome due to missed defaults. XGBoost: cost-weighted 0.62, ROC-AUC 0.76, recall 0.53. The result illustrates that optimising for accuracy on an imbalanced dataset actively harms the business objective.
