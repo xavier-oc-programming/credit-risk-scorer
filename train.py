@@ -300,7 +300,24 @@ models_config = [
         verbosity=0)),         # silences XGBoost's per-tree training output
 ]
 
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+import socket as _socket
+def _mlflow_server_reachable(uri):
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(uri)
+        s = _socket.create_connection((p.hostname, p.port or 80), timeout=2)
+        s.close()
+        return True
+    except OSError:
+        return False
+
+if _mlflow_server_reachable(MLFLOW_TRACKING_URI):
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    print(f'MLflow server found — tracking to {MLFLOW_TRACKING_URI}')
+else:
+    mlflow.set_tracking_uri('')  # empty string = local ./mlruns directory
+    print('MLflow server not running — tracking to local ./mlruns')
+
 mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 
 all_metrics = {}
@@ -376,7 +393,6 @@ model_metrics_payload = {
 with open(MODEL_DIR / 'model_metrics.json', 'w') as f:
     json.dump(model_metrics_payload, f, indent=2)
 
-mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 with mlflow.start_run(run_name=f'{best_model_name}_best_registered'):
     mlflow.sklearn.log_model(
         best_pipeline,

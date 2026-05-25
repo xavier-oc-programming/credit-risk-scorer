@@ -146,11 +146,11 @@ Three classifiers are trained and compared:
 
 | Model | Accuracy | Precision | Recall | F1 | ROC-AUC | Cost-Weighted |
 |---|---|---|---|---|---|---|
-| Logistic Regression | TBD | TBD | TBD | TBD | TBD | TBD |
-| Random Forest | TBD | TBD | TBD | TBD | TBD | TBD |
-| XGBoost | TBD | TBD | TBD | TBD | TBD | TBD |
+| **Logistic Regression** ✓ | 0.615 | 0.430 | **0.867** | 0.575 | **0.803** | **0.752** |
+| Random Forest | 0.760 | 0.688 | 0.367 | 0.478 | 0.789 | 0.546 |
+| XGBoost | 0.715 | 0.525 | 0.533 | 0.529 | 0.760 | 0.616 |
 
-*Populate after running `python train.py`.*
+**Winner: Logistic Regression** — selected by `cost_weighted_score`. Despite lower accuracy than Random Forest, it catches 86.7% of bad loans (recall) vs 36.7% for Random Forest. In credit lending, an undetected bad loan costs 5× more than a rejected good loan — high recall on the bad class is the objective.
 
 ---
 
