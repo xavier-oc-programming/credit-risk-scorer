@@ -148,16 +148,16 @@ templates = Jinja2Templates(directory='templates')
 
 class CreditApplication(BaseModel):
     """Input features for credit risk scoring."""
-    duration: int = Field(..., description='Loan duration in months', ge=1, le=120)
-    credit_amount: float = Field(..., description='Loan amount in DM', ge=0)
-    installment_commitment: int = Field(..., description='Installment rate as % of income', ge=1, le=4)
-    age: int = Field(..., description='Applicant age in years', ge=18, le=100)
-    existing_credits: int = Field(..., description='Number of existing credits at this bank', ge=0, le=4)
-    checking_status: str = Field(..., description="Checking account status: 'no checking', '<0', '0<=X<200', '>=200'")
-    credit_history: str = Field(..., description="Credit history: 'no credits/all paid', 'all paid', 'existing paid', 'delayed previously', 'critical/other existing credit'")
-    purpose: str = Field(..., description="Loan purpose: 'new car', 'used car', 'furniture/equipment', 'radio/tv', 'domestic appliance', 'repairs', 'education', 'retraining', 'business', 'other'")
-    savings_status: str = Field(..., description="Savings account status: 'no known savings', '<100', '100<=X<500', '500<=X<1000', '>=1000'")
-    employment: str = Field(..., description="Employment duration: 'unemployed', '<1', '1<=X<4', '4<=X<7', '>=7'")
+    duration: int = Field(..., description='Loan duration in months', ge=1, le=120, examples=[24])
+    credit_amount: float = Field(..., description='Loan amount in DM', ge=0, examples=[5000])
+    installment_commitment: int = Field(..., description='Installment rate as % of income', ge=1, le=4, examples=[3])
+    age: int = Field(..., description='Applicant age in years', ge=18, le=100, examples=[35])
+    existing_credits: int = Field(..., description='Number of existing credits at this bank', ge=0, le=4, examples=[1])
+    checking_status: str = Field(..., description="Checking account status: 'no checking', '<0', '0<=X<200', '>=200'", examples=['0<=X<200'])
+    credit_history: str = Field(..., description="Credit history: 'no credits/all paid', 'all paid', 'existing paid', 'delayed previously', 'critical/other existing credit'", examples=['existing paid'])
+    purpose: str = Field(..., description="Loan purpose: 'new car', 'used car', 'furniture/equipment', 'radio/tv', 'domestic appliance', 'repairs', 'education', 'retraining', 'business', 'other'", examples=['new car'])
+    savings_status: str = Field(..., description="Savings account status: 'no known savings', '<100', '100<=X<500', '500<=X<1000', '>=1000'", examples=['<100'])
+    employment: str = Field(..., description="Employment duration: 'unemployed', '<1', '1<=X<4', '4<=X<7', '>=7'", examples=['1<=X<4'])
 
 
 class RiskScore(BaseModel):
