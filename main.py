@@ -121,9 +121,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title='Credit Risk Scoring API',
     description=(
-        'Predicts probability of loan default using XGBoost trained on the '
+        'Predicts probability of loan default using Logistic Regression trained on the '
         'German Credit dataset. Risk scores 0-100, risk bands '
-        'Low/Medium/High/Very High.'
+        'Low/Medium/High/Very High.\n\n'
+        '**[Try the demo UI →](/demo)**'
     ),
     version='1.0.0',
     docs_url='/docs',
