@@ -105,6 +105,8 @@ async def lifespan(app: FastAPI):
 
         MODEL_LOADED = True
         print(f'Model loaded: {model_name}')
+        print(f'Docs:         http://127.0.0.1:8000/docs')
+        print(f'Demo UI:      http://127.0.0.1:8000/demo')
     except Exception as e:
         # API still starts with MODEL_LOADED=False — health endpoint stays up
         # so load balancers can detect the degraded state without a crash.
