@@ -16,7 +16,7 @@ import shap
 
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
@@ -290,7 +290,26 @@ def demo(request: Request):
 
 
 @app.post('/score', response_model=RiskScore, summary='Score a single application', tags=['Scoring'])
-def score(application: CreditApplication):
+def score(application: CreditApplication = Body(openapi_examples={
+    'low_risk': {
+        'summary': 'Low-risk applicant',
+        'value': {
+            'duration': 12, 'credit_amount': 2000, 'installment_commitment': 1,
+            'age': 45, 'existing_credits': 1, 'checking_status': '>=200',
+            'credit_history': 'existing paid', 'purpose': 'radio/tv',
+            'savings_status': '>=1000', 'employment': '>=7',
+        },
+    },
+    'high_risk': {
+        'summary': 'High-risk applicant',
+        'value': {
+            'duration': 48, 'credit_amount': 15000, 'installment_commitment': 4,
+            'age': 22, 'existing_credits': 3, 'checking_status': 'no checking',
+            'credit_history': 'delayed previously', 'purpose': 'new car',
+            'savings_status': 'no known savings', 'employment': '<1',
+        },
+    },
+})):
     """
     Submit one loan application and get back an instant risk assessment.
 
@@ -323,7 +342,31 @@ def score(application: CreditApplication):
 
 
 @app.post('/score/batch', response_model=list[RiskScore], summary='Score up to 100 applications at once', tags=['Scoring'])
-def score_batch(applications: list[CreditApplication]):
+def score_batch(applications: list[CreditApplication] = Body(openapi_examples={
+    'three_applicants': {
+        'summary': 'Three applicants — low, medium, high risk',
+        'value': [
+            {
+                'duration': 12, 'credit_amount': 2000, 'installment_commitment': 1,
+                'age': 45, 'existing_credits': 1, 'checking_status': '>=200',
+                'credit_history': 'existing paid', 'purpose': 'radio/tv',
+                'savings_status': '>=1000', 'employment': '>=7',
+            },
+            {
+                'duration': 24, 'credit_amount': 5000, 'installment_commitment': 3,
+                'age': 35, 'existing_credits': 2, 'checking_status': '0<=X<200',
+                'credit_history': 'existing paid', 'purpose': 'furniture/equipment',
+                'savings_status': '<100', 'employment': '1<=X<4',
+            },
+            {
+                'duration': 48, 'credit_amount': 15000, 'installment_commitment': 4,
+                'age': 22, 'existing_credits': 3, 'checking_status': 'no checking',
+                'credit_history': 'delayed previously', 'purpose': 'new car',
+                'savings_status': 'no known savings', 'employment': '<1',
+            },
+        ],
+    },
+})):
     """
     Submit a list of loan applications (up to 100) and get back a risk
     assessment for each one in a single API call.
