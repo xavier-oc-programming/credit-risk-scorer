@@ -331,6 +331,30 @@ def score_batch(applications: list[CreditApplication]):
     The response is a list in the same order as the input — the first result
     corresponds to the first application, and so on. Useful when a bank needs
     to process a queue of applications in bulk rather than one at a time.
+
+    Example — three applicants with different risk profiles:
+    ```json
+    [
+      {
+        "duration": 12, "credit_amount": 2000, "installment_commitment": 1,
+        "age": 45, "existing_credits": 1, "checking_status": ">=200",
+        "credit_history": "existing paid", "purpose": "radio/tv",
+        "savings_status": ">=1000", "employment": ">=7"
+      },
+      {
+        "duration": 24, "credit_amount": 5000, "installment_commitment": 3,
+        "age": 35, "existing_credits": 2, "checking_status": "0<=X<200",
+        "credit_history": "existing paid", "purpose": "furniture/equipment",
+        "savings_status": "<100", "employment": "1<=X<4"
+      },
+      {
+        "duration": 48, "credit_amount": 15000, "installment_commitment": 4,
+        "age": 22, "existing_credits": 3, "checking_status": "no checking",
+        "credit_history": "delayed previously", "purpose": "new car",
+        "savings_status": "no known savings", "employment": "<1"
+      }
+    ]
+    ```
     """
     if len(applications) > 100:
         raise HTTPException(status_code=400, detail='Maximum 100 applications per batch')
