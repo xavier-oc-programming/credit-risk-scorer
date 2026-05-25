@@ -5,6 +5,9 @@ This module is the primary interface between raw model explainability output
 and human-readable risk factors returned by the FastAPI scoring endpoint.
 """
 
+# Maps one-hot encoded feature names (as produced by ColumnTransformer) to
+# plain English. The keys must exactly match the names returned by
+# ohe.get_feature_names_out() — including the 'featurename_category' format.
 FEATURE_LABELS = {
     'duration': 'loan duration',
     'credit_amount': 'loan amount',
@@ -62,6 +65,10 @@ FEATURE_LABELS = {
     'num_dependents': 'number of dependents',
 }
 
+# Maps each feature to a (positive_shap_text, negative_shap_text) tuple.
+# Index 0 is used when SHAP > 0 (feature pushes toward default = risk factor).
+# Index 1 is used when SHAP < 0 (feature pushes away from default = protective).
+# Features not listed here fall back to the generic "{label} increases/reduces default risk".
 DIRECTION_TEMPLATES = {
     'duration': (
         'longer loan duration increases default risk',
@@ -240,6 +247,8 @@ def shap_values_to_risk_factors(
     risk_factors = []
     protective_factors = []
 
+    # Sort by absolute SHAP value descending so we pick the most impactful
+    # features first — both risk and protective — before applying top_n.
     paired = sorted(
         zip(shap_vals, feature_names),
         key=lambda x: abs(x[0]),
@@ -247,6 +256,8 @@ def shap_values_to_risk_factors(
     )
 
     for shap_val, feature_name in paired:
+        # Skip near-zero SHAP values — the feature had negligible influence
+        # on this prediction and including it would mislead the applicant.
         if abs(shap_val) < 0.01:
             continue
 
@@ -254,16 +265,15 @@ def shap_values_to_risk_factors(
         templates = DIRECTION_TEMPLATES.get(feature_name)
 
         if shap_val > 0:
-            if templates:
-                text = templates[0]
-            else:
-                text = f'{label} increases default risk'
+            # Positive SHAP: feature pushed the model toward predicting default.
+            text = templates[0] if templates else f'{label} increases default risk'
             risk_factors.append(text)
         else:
-            if templates:
-                text = templates[1]
-            else:
-                text = f'{label} reduces default risk'
+            # Negative SHAP: feature pushed the model away from default.
+            text = templates[1] if templates else f'{label} reduces default risk'
             protective_factors.append(text)
 
+    # Slice after the loop so top_n applies independently to each list —
+    # we want the top N risk factors AND the top N protective factors,
+    # not the top N features overall.
     return risk_factors[:top_n], protective_factors[:top_n]

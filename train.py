@@ -15,7 +15,7 @@ warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Agg')  # non-interactive backend — no display required when saving to file
 import matplotlib.pyplot as plt
 import seaborn as sns
 import shap
@@ -27,7 +27,7 @@ from pathlib import Path
 from sklearn.datasets import fetch_openml
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
@@ -59,11 +59,15 @@ print(class_counts)
 imbalance_ratio = class_counts['bad'] / class_counts['good']
 print(f'Imbalance ratio (bad/good): {imbalance_ratio:.2f}')
 
+# Encode target: 'bad' → 1, 'good' → 0. Binary int is required by most
+# sklearn metrics and lets us use .sum() to count positives.
 df['target'] = (df[TARGET_COLUMN] == POSITIVE_CLASS).astype(int)
 df = df.drop(columns=[TARGET_COLUMN])
 
+# Detect feature types from pandas dtypes — avoids hardcoding column names
+# that could change across dataset versions.
 numeric_features = df.select_dtypes(include=['number']).columns.tolist()
-numeric_features = [f for f in numeric_features if f != 'target']
+numeric_features = [f for f in numeric_features if f != 'target']  # exclude label
 categorical_features = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
 print(f'\nNumeric features ({len(numeric_features)}): {numeric_features}')
@@ -116,7 +120,7 @@ for i, (feature, title) in enumerate([
 # 05 — correlation heatmap
 fig, ax = plt.subplots(figsize=(9, 7))
 corr = df[numeric_features + ['target']].corr()
-mask = np.triu(np.ones_like(corr, dtype=bool))
+mask = np.triu(np.ones_like(corr, dtype=bool))  # hide upper triangle — avoids duplicate pairs
 sns.heatmap(corr, mask=mask, annot=True, fmt='.2f', cmap='RdYlGn_r',
             center=0, square=True, linewidths=0.5, ax=ax,
             cbar_kws={'shrink': 0.8})
@@ -152,6 +156,14 @@ print('EDA plots saved to plots/')
 
 # ── Preprocessing ─────────────────────────────────────────────────────────────
 
+# StandardScaler normalises numeric features — required for Logistic Regression
+# (gradient descent converges faster) and has no negative effect on tree models.
+# OneHotEncoder drop='first' removes one column per feature to avoid the dummy
+# variable trap (perfect multicollinearity with an intercept term).
+# sparse_output=False returns a dense array compatible with SHAP.
+# handle_unknown='ignore' silently zero-encodes categories not seen in training
+# rather than raising an error — important for API input that may differ from
+# the training set.
 preprocessor = ColumnTransformer(transformers=[
     ('num', StandardScaler(), numeric_features),
     ('cat', OneHotEncoder(drop='first', sparse_output=False, handle_unknown='ignore'),
@@ -161,6 +173,8 @@ preprocessor = ColumnTransformer(transformers=[
 X = df.drop(columns=['target'])
 y = df['target']
 
+# stratify=y preserves the 70/30 class ratio in both splits — without this,
+# random chance could give the test set a very different imbalance than training.
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=TEST_SIZE, stratify=y, random_state=RANDOM_STATE,
 )
@@ -182,10 +196,15 @@ def cost_weighted_score_metric(y_true, y_pred):
     costs in credit lending.
     """
     cm = confusion_matrix(y_true, y_pred)
+    # confusion_matrix layout: cm[actual][predicted]
+    # cm[1][0] = actual bad, predicted good → false negative (approved bad loan)
+    # cm[0][1] = actual good, predicted bad → false positive (rejected good loan)
     fn = cm[1][0]
     fp = cm[0][1]
     total_bad = y_true.sum()
     total_good = len(y_true) - total_bad
+    # Formula: 1 - (weighted error) / (worst-case weighted error)
+    # Score of 1.0 = perfect; score of 0.0 = every bad loan approved.
     return 1 - (5 * fn + fp) / (5 * total_bad + total_good)
 
 
@@ -209,12 +228,16 @@ def evaluate_model(pipeline, X_test, y_test, model_name):
 
 models_config = [
     ('LogisticRegression', LogisticRegression(
-        random_state=RANDOM_STATE, max_iter=1000, class_weight=CLASS_WEIGHT)),
+        random_state=RANDOM_STATE,
+        max_iter=1000,         # default 100 often fails to converge on this dataset
+        class_weight=CLASS_WEIGHT)),
     ('RandomForest', RandomForestClassifier(
         n_estimators=100, random_state=RANDOM_STATE, class_weight=CLASS_WEIGHT)),
     ('XGBoost', XGBClassifier(
         n_estimators=100, random_state=RANDOM_STATE,
-        scale_pos_weight=5, eval_metric='logloss', verbosity=0)),
+        scale_pos_weight=5,    # XGBoost equivalent of class_weight={0:1, 1:5}
+        eval_metric='logloss', # suppresses a deprecation warning in XGBoost 2.x
+        verbosity=0)),         # silences XGBoost's per-tree training output
 ]
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
@@ -238,6 +261,8 @@ for model_name, model in models_config:
 
         params = {'model': model_name}
         if hasattr(model, 'get_params'):
+            # Filter out dict-valued and None params — MLflow log_params
+            # only accepts string-serialisable scalar values.
             params.update({k: v for k, v in model.get_params().items()
                            if not isinstance(v, dict) and v is not None})
         mlflow.log_params(params)
@@ -306,13 +331,21 @@ print(f'\nModel saved to {MODEL_DIR}/best_model.pkl')
 
 print('\nRunning SHAP analysis...')
 
+# Transform X_test manually — we need the transformed array to pass to SHAP,
+# which expects the preprocessed feature space, not raw strings.
 X_test_transformed = best_pipeline.named_steps['preprocessor'].transform(X_test)
 classifier = best_pipeline.named_steps['classifier']
 
+# Reconstruct the full feature name list after one-hot encoding.
+# get_feature_names_out() returns names like 'checking_status_no checking'
+# that match the keys in FEATURE_LABELS and DIRECTION_TEMPLATES.
 ohe = best_pipeline.named_steps['preprocessor'].named_transformers_['cat']
 cat_feature_names = ohe.get_feature_names_out(categorical_features).tolist()
 all_feature_names = numeric_features + cat_feature_names
 
+# LinearExplainer is faster and exact for linear models (Logistic Regression).
+# shap.Explainer auto-selects TreeExplainer for XGBoost and Random Forest,
+# which is also exact. Using the wrong explainer type raises a TypeError.
 if best_model_name == 'LogisticRegression':
     explainer = shap.LinearExplainer(classifier, X_test_transformed)
 else:
@@ -320,6 +353,8 @@ else:
 
 shap_values = explainer(X_test_transformed)
 
+# shap.Explainer returns an Explanation object (shap_values.values) while
+# shap.LinearExplainer may return a raw array — handle both.
 shap_vals_array = shap_values.values if hasattr(shap_values, 'values') else shap_values
 
 # 07 — SHAP summary beeswarm
@@ -377,7 +412,10 @@ plt.tight_layout()
 plt.savefig(PLOTS_DIR / '10_model_comparison.png', dpi=150)
 plt.close()
 
-# SHAP feature importance — top 10
+# SHAP feature importance — top 10.
+# Mean absolute SHAP value across all test samples is the standard global
+# importance metric: it tells us which features move predictions the most
+# on average, regardless of direction.
 mean_abs_shap = np.abs(shap_vals_array).mean(axis=0)
 feature_importance = sorted(
     zip(all_feature_names, mean_abs_shap.tolist()),

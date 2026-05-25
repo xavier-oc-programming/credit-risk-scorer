@@ -29,6 +29,8 @@ from risk_explainer import shap_values_to_risk_factors
 
 # ── Global state ──────────────────────────────────────────────────────────────
 
+# Module-level globals so the model and SHAP explainer are loaded once at
+# startup and reused across all requests — not reloaded per request.
 MODEL_LOADED = False
 pipeline = None
 model_name = 'unknown'
@@ -37,6 +39,9 @@ shap_feature_importance = []
 shap_explainer = None
 feature_names: list[str] = []
 
+# The full feature list expected by the preprocessor, in the same order
+# used during training. The API only exposes a subset to callers; the rest
+# are filled with neutral defaults in score_application().
 numeric_features = [
     'duration', 'credit_amount', 'installment_commitment',
     'age', 'existing_credits', 'residence_since', 'num_dependents',
@@ -49,6 +54,8 @@ categorical_features = [
 ]
 
 
+# lifespan replaces the deprecated @app.on_event("startup") pattern.
+# Code before `yield` runs at startup; code after runs at shutdown.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global MODEL_LOADED, pipeline, model_name, model_metrics
@@ -63,11 +70,16 @@ async def lifespan(app: FastAPI):
         with open(MODEL_DIR / 'shap_feature_importance.json') as f:
             shap_feature_importance = json.load(f)
 
+        # Recover the post-encoding feature names from the fitted OHE —
+        # these are the column names SHAP sees (e.g. 'checking_status_no checking').
         ohe = pipeline.named_steps['preprocessor'].named_transformers_['cat']
         cat_feature_names = ohe.get_feature_names_out(categorical_features).tolist()
         feature_names = numeric_features + cat_feature_names
 
         classifier = pipeline.named_steps['classifier']
+        # SHAP explainers need a background dataset to estimate feature contributions.
+        # We pass one representative sample so the explainer is built once at startup
+        # rather than rebuilt per request (which would be very slow).
         dummy_input = pipeline.named_steps['preprocessor'].transform(
             pd.DataFrame([{
                 'duration': 12, 'credit_amount': 2000,
@@ -84,6 +96,8 @@ async def lifespan(app: FastAPI):
             }])
         )
 
+        # Use the exact same explainer logic as train.py so SHAP values
+        # are computed with the appropriate algorithm for each model type.
         if model_name == 'LogisticRegression':
             shap_explainer = shap.LinearExplainer(classifier, dummy_input)
         else:
@@ -92,6 +106,8 @@ async def lifespan(app: FastAPI):
         MODEL_LOADED = True
         print(f'Model loaded: {model_name}')
     except Exception as e:
+        # API still starts with MODEL_LOADED=False — health endpoint stays up
+        # so load balancers can detect the degraded state without a crash.
         print(f'Model loading failed: {e}')
         MODEL_LOADED = False
 
@@ -113,6 +129,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Permissive CORS so the demo frontend (served at /demo) can call /score
+# from a browser, and so third-party clients can explore the API from /docs.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
@@ -164,6 +182,10 @@ def score_application(application: CreditApplication) -> RiskScore:
     if not MODEL_LOADED:
         raise HTTPException(status_code=503, detail='Model not loaded')
 
+    # The API exposes 10 fields. The preprocessor trained on 20 features,
+    # so the remaining 10 are filled with neutral/modal values from the
+    # training set. These fields have low SHAP importance and don't
+    # meaningfully affect the score, but the pipeline requires them.
     input_data = {
         'duration': application.duration,
         'credit_amount': application.credit_amount,
@@ -175,6 +197,7 @@ def score_application(application: CreditApplication) -> RiskScore:
         'purpose': application.purpose,
         'savings_status': application.savings_status,
         'employment': application.employment,
+        # Neutral defaults for fields not collected from the caller:
         'residence_since': 3,
         'num_dependents': 1,
         'personal_status': 'male single',
@@ -190,17 +213,22 @@ def score_application(application: CreditApplication) -> RiskScore:
     df_input = pd.DataFrame([input_data])
     X_transformed = pipeline.named_steps['preprocessor'].transform(df_input)
 
+    # predict_proba returns [[p_good, p_bad]] — index 1 is probability of the
+    # positive class (bad credit = default), which is what we report.
     probability = float(pipeline.predict_proba(df_input)[0][1])
     risk_score = int(probability * 100)
     band_info = get_risk_band(probability)
 
     shap_vals_obj = shap_explainer(X_transformed)
+    # Normalise output: Explanation object vs raw array (see train.py note).
     shap_vals = shap_vals_obj.values[0] if hasattr(shap_vals_obj, 'values') else shap_vals_obj[0]
 
     risk_factors, protective_factors = shap_values_to_risk_factors(
         shap_vals.tolist(), feature_names, top_n=3,
     )
 
+    # Include the raw SHAP dict in the response so API consumers can build
+    # their own explanations or audit the model's reasoning per prediction.
     shap_raw = {name: round(float(val), 4)
                 for name, val in zip(feature_names, shap_vals)}
 
