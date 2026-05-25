@@ -1,0 +1,33 @@
+# CI pipeline — runs on every push to main
+# Tests the FastAPI endpoints using FastAPI TestClient
+# Does NOT run train.py (requires trained model files)
+# Does NOT deploy to Azure (manual deployment via az CLI)
+# For a production system, deployment would be added here
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+      - name: Check imports
+        run: python -c "from main import app; print('FastAPI app imports OK')"

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Credit Risk Scoring API — Live Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #1A1A2E;
+      --navy-mid: #16213E;
+      --navy-light: #0F3460;
+      --accent: #E94560;
+      --low: #27AE60;
+      --medium: #F39C12;
+      --high: #E67E22;
+      --very-high: #C0392B;
+      --text: #E8E8E8;
+      --text-muted: #9AA5B4;
+      --border: #2D3748;
+      --surface: #1E2A3A;
+      --input-bg: #243447;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--navy);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    header {
+      background: var(--navy-mid);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 700; color: #fff; }
+    header p { font-size: 0.85rem; color: var(--text-muted); }
+    header a { color: #60A5FA; text-decoration: none; }
+    header a:hover { text-decoration: underline; }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .form-group { margin-bottom: 1rem; }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input, select {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.55rem 0.75rem;
+      color: var(--text);
+      font-size: 0.9rem;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #60A5FA;
+    }
+
+    select option { background: var(--input-bg); }
+
+    .examples {
+      margin-bottom: 1.25rem;
+    }
+
+    .examples p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .example-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .btn-example {
+      padding: 0.3rem 0.7rem;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-example:hover { border-color: #60A5FA; color: #60A5FA; }
+
+    .btn-score {
+      width: 100%;
+      padding: 0.8rem;
+      background: var(--navy-light);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: background 0.2s;
+      letter-spacing: 0.02em;
+    }
+
+    .btn-score:hover { background: #1a4a7a; }
+    .btn-score:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Results panel */
+    #results { display: none; }
+
+    .risk-badge {
+      display: inline-block;
+      padding: 0.5rem 1.5rem;
+      border-radius: 30px;
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .score-display {
+      margin: 1rem 0;
+    }
+
+    .score-display .score-number {
+      font-size: 3.5rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .score-display .score-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 0.2rem;
+    }
+
+    .score-bar-track {
+      width: 100%;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      margin: 0.75rem 0 1.25rem;
+      overflow: hidden;
+    }
+
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .decision-label {
+      font-size: 1.1rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      display: inline-block;
+      margin-bottom: 1.25rem;
+    }
+
+    .factors-section { margin-top: 1rem; }
+
+    .factors-section h3 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .factors-section ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .factors-section ul li {
+      font-size: 0.88rem;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .factors-section ul li:last-child { border-bottom: none; }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 0.4rem;
+    }
+
+    .dot-risk { background: var(--very-high); }
+    .dot-protect { background: var(--low); }
+
+    .result-meta {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .result-meta a { color: #60A5FA; text-decoration: none; }
+
+    .error-msg {
+      background: rgba(201, 57, 43, 0.15);
+      border: 1px solid var(--very-high);
+      border-radius: 8px;
+      padding: 1rem;
+      color: #E88;
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Credit Risk Scoring API — Live Demo</h1>
+    <p>For full API documentation see <a href="/docs">/docs</a></p>
+  </div>
+  <a href="/docs">API Docs →</a>
+</header>
+
+<div class="container">
+  <!-- Left: Form -->
+  <div class="card">
+    <h2>Credit Application</h2>
+
+    <div class="examples">
+      <p>Load example applicant:</p>
+      <div class="example-buttons">
+        <button class="btn-example" onclick="loadExample('low')">Low Risk</button>
+        <button class="btn-example" onclick="loadExample('medium')">Medium Risk</button>
+        <button class="btn-example" onclick="loadExample('high')">High Risk</button>
+        <button class="btn-example" onclick="loadExample('edge')">Edge Case</button>
+      </div>
+    </div>
+
+    <form id="scoreForm">
+      <div class="form-group">
+        <label>Loan duration (months)</label>
+        <input type="number" id="duration" min="1" max="120" value="24" required />
+      </div>
+      <div class="form-group">
+        <label>Loan amount (DM)</label>
+        <input type="number" id="credit_amount" min="0" value="5000" required />
+      </div>
+      <div class="form-group">
+        <label>Installment rate (% of income)</label>
+        <select id="installment_commitment">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Applicant age</label>
+        <input type="number" id="age" min="18" max="100" value="35" required />
+      </div>
+      <div class="form-group">
+        <label>Existing credits at this bank</label>
+        <select id="existing_credits">
+          <option value="0">0</option>
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Checking account status</label>
+        <select id="checking_status">
+          <option value="no checking">No checking account</option>
+          <option value="<0">Overdrawn (&lt;0)</option>
+          <option value="0<=X<200" selected>Low balance (0–200)</option>
+          <option value=">=200">High balance (≥200)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Credit history</label>
+        <select id="credit_history">
+          <option value="no credits/all paid">No credits / all paid</option>
+          <option value="all paid">All paid</option>
+          <option value="existing paid" selected>Existing paid</option>
+          <option value="delayed previously">Delayed previously</option>
+          <option value="critical/other existing credit">Critical / other existing</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Loan purpose</label>
+        <select id="purpose">
+          <option value="new car">New car</option>
+          <option value="used car">Used car</option>
+          <option value="furniture/equipment">Furniture / equipment</option>
+          <option value="radio/tv" selected>Radio / TV</option>
+          <option value="domestic appliance">Domestic appliance</option>
+          <option value="repairs">Repairs</option>
+          <option value="education">Education</option>
+          <option value="retraining">Retraining</option>
+          <option value="business">Business</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Savings account status</label>
+        <select id="savings_status">
+          <option value="no known savings">No known savings</option>
+          <option value="<100" selected>Below 100 DM</option>
+          <option value="100<=X<500">100–500 DM</option>
+          <option value="500<=X<1000">500–1000 DM</option>
+          <option value=">=1000">1000+ DM</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Employment duration</label>
+        <select id="employment">
+          <option value="unemployed">Unemployed</option>
+          <option value="<1">Less than 1 year</option>
+          <option value="1<=X<4" selected>1–4 years</option>
+          <option value="4<=X<7">4–7 years</option>
+          <option value=">=7">7+ years</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn-score" id="submitBtn">Score Application</button>
+    </form>
+  </div>
+
+  <!-- Right: Results -->
+  <div class="card" id="results">
+    <h2>Risk Assessment</h2>
+    <div id="resultsContent"></div>
+  </div>
+</div>
+
+<script>
+  const examples = {
+    low: {
+      duration: 12, credit_amount: 2000, installment_commitment: 2, age: 45,
+      existing_credits: 1, checking_status: '>=200', credit_history: 'existing paid',
+      purpose: 'radio/tv', savings_status: '>=1000', employment: '>=7',
+    },
+    high: {
+      duration: 48, credit_amount: 15000, installment_commitment: 4, age: 22,
+      existing_credits: 3, checking_status: 'no checking',
+      credit_history: 'delayed previously', purpose: 'new car',
+      savings_status: 'no known savings', employment: '<1',
+    },
+    medium: {
+      duration: 24, credit_amount: 6000, installment_commitment: 3, age: 32,
+      existing_credits: 1, checking_status: '0<=X<200', credit_history: 'existing paid',
+      purpose: 'furniture/equipment', savings_status: '<100', employment: '1<=X<4',
+    },
+    edge: {
+      duration: 36, credit_amount: 8000, installment_commitment: 2, age: 28,
+      existing_credits: 2, checking_status: '<0', credit_history: 'all paid',
+      purpose: 'business', savings_status: '100<=X<500', employment: '4<=X<7',
+    },
+  };
+
+  function loadExample(type) {
+    const ex = examples[type];
+    Object.entries(ex).forEach(([key, val]) => {
+      const el = document.getElementById(key);
+      if (el) el.value = val;
+    });
+  }
+
+  const bandColours = {
+    'Low': '#27AE60',
+    'Medium': '#F39C12',
+    'High': '#E67E22',
+    'Very High': '#C0392B',
+  };
+
+  function renderResults(data) {
+    const colour = bandColours[data.risk_band] || '#888';
+    const riskFactorsHtml = data.risk_factors.length
+      ? data.risk_factors.map(f =>
+          `<li><span class="dot dot-risk"></span>${f}</li>`).join('')
+      : '<li><span class="dot dot-risk"></span>No significant risk factors identified</li>';
+
+    const protectHtml = data.protective_factors.length
+      ? data.protective_factors.map(f =>
+          `<li><span class="dot dot-protect"></span>${f}</li>`).join('')
+      : '<li><span class="dot dot-protect"></span>No significant protective factors identified</li>';
+
+    return `
+      <div>
+        <span class="risk-badge" style="background:${colour}22;color:${colour};border:2px solid ${colour}">
+          ${data.risk_band}
+        </span>
+
+        <div class="score-display">
+          <div class="score-number" style="color:${colour}">${data.risk_score}</div>
+          <div class="score-label">Risk Score (0 = lowest · 100 = highest)</div>
+        </div>
+
+        <div class="score-bar-track">
+          <div class="score-bar-fill" id="scoreBar"
+               style="width:0%;background:${colour}"></div>
+        </div>
+
+        <div class="decision-label"
+             style="background:${colour}22;color:${colour};border:1px solid ${colour}">
+          Decision: ${data.decision}
+        </div>
+
+        <div style="font-size:0.85rem;color:#9AA5B4;margin-bottom:1rem">
+          Probability of default: <strong style="color:${colour}">${(data.probability_of_default * 100).toFixed(1)}%</strong>
+        </div>
+
+        <div class="factors-section">
+          <h3>Risk Factors</h3>
+          <ul>${riskFactorsHtml}</ul>
+        </div>
+
+        <div class="factors-section" style="margin-top:1rem">
+          <h3>Protective Factors</h3>
+          <ul>${protectHtml}</ul>
+        </div>
+
+        <div class="result-meta">
+          <span>Model: ${data.model_used}</span>
+          <a href="/docs" target="_blank">Full API docs →</a>
+        </div>
+      </div>
+    `;
+  }
+
+  document.getElementById('scoreForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Scoring…';
+
+    const payload = {
+      duration: parseInt(document.getElementById('duration').value),
+      credit_amount: parseFloat(document.getElementById('credit_amount').value),
+      installment_commitment: parseInt(document.getElementById('installment_commitment').value),
+      age: parseInt(document.getElementById('age').value),
+      existing_credits: parseInt(document.getElementById('existing_credits').value),
+      checking_status: document.getElementById('checking_status').value,
+      credit_history: document.getElementById('credit_history').value,
+      purpose: document.getElementById('purpose').value,
+      savings_status: document.getElementById('savings_status').value,
+      employment: document.getElementById('employment').value,
+    };
+
+    const resultsEl = document.getElementById('results');
+    const contentEl = document.getElementById('resultsContent');
+
+    try {
+      const res = await fetch('/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        contentEl.innerHTML = `<div class="error-msg">Error ${res.status}: ${JSON.stringify(err.detail)}</div>`;
+      } else {
+        const data = await res.json();
+        contentEl.innerHTML = renderResults(data);
+        setTimeout(() => {
+          const bar = document.getElementById('scoreBar');
+          if (bar) bar.style.width = data.risk_score + '%';
+        }, 50);
+      }
+    } catch (err) {
+      contentEl.innerHTML = `<div class="error-msg">Request failed: ${err.message}</div>`;
+    }
+
+    resultsEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Score Application';
+  });
+</script>
+
+</body>
+</html>

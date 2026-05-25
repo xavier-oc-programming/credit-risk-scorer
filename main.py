@@ -1,0 +1,303 @@
+"""
+FastAPI credit risk scoring API.
+
+Loads a trained sklearn pipeline (preprocessor + classifier) and serves
+credit risk predictions with SHAP-based plain-English explanations.
+
+Run locally: uvicorn main:app --reload
+Docker:      docker-compose up
+"""
+
+import json
+import pickle
+import numpy as np
+import pandas as pd
+import shap
+
+from pathlib import Path
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
+from pydantic import BaseModel, Field
+from typing import Optional
+
+from config import MODEL_DIR, RISK_BANDS, CLASS_WEIGHT
+from risk_explainer import shap_values_to_risk_factors
+
+# ── Global state ──────────────────────────────────────────────────────────────
+
+MODEL_LOADED = False
+pipeline = None
+model_name = 'unknown'
+model_metrics = {}
+shap_feature_importance = []
+shap_explainer = None
+feature_names: list[str] = []
+
+numeric_features = [
+    'duration', 'credit_amount', 'installment_commitment',
+    'age', 'existing_credits', 'residence_since', 'num_dependents',
+]
+categorical_features = [
+    'checking_status', 'credit_history', 'purpose', 'savings_status',
+    'employment', 'personal_status', 'other_parties',
+    'property_magnitude', 'other_payment_plans', 'housing', 'job',
+    'own_telephone', 'foreign_worker',
+]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global MODEL_LOADED, pipeline, model_name, model_metrics
+    global shap_feature_importance, shap_explainer, feature_names
+
+    try:
+        with open(MODEL_DIR / 'best_model.pkl', 'rb') as f:
+            pipeline = pickle.load(f)
+        model_name = (MODEL_DIR / 'best_model_name.txt').read_text().strip()
+        with open(MODEL_DIR / 'model_metrics.json') as f:
+            model_metrics = json.load(f)
+        with open(MODEL_DIR / 'shap_feature_importance.json') as f:
+            shap_feature_importance = json.load(f)
+
+        ohe = pipeline.named_steps['preprocessor'].named_transformers_['cat']
+        cat_feature_names = ohe.get_feature_names_out(categorical_features).tolist()
+        feature_names = numeric_features + cat_feature_names
+
+        classifier = pipeline.named_steps['classifier']
+        dummy_input = pipeline.named_steps['preprocessor'].transform(
+            pd.DataFrame([{
+                'duration': 12, 'credit_amount': 2000,
+                'installment_commitment': 2, 'age': 35,
+                'existing_credits': 1, 'residence_since': 3,
+                'num_dependents': 1, 'checking_status': '>=200',
+                'credit_history': 'existing paid', 'purpose': 'radio/tv',
+                'savings_status': '>=1000', 'employment': '>=7',
+                'personal_status': 'male single', 'other_parties': 'none',
+                'property_magnitude': 'real estate',
+                'other_payment_plans': 'none', 'housing': 'own',
+                'job': 'skilled', 'own_telephone': 'yes',
+                'foreign_worker': 'yes',
+            }])
+        )
+
+        if model_name == 'LogisticRegression':
+            shap_explainer = shap.LinearExplainer(classifier, dummy_input)
+        else:
+            shap_explainer = shap.Explainer(classifier, dummy_input)
+
+        MODEL_LOADED = True
+        print(f'Model loaded: {model_name}')
+    except Exception as e:
+        print(f'Model loading failed: {e}')
+        MODEL_LOADED = False
+
+    yield
+
+
+# ── FastAPI app ───────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title='Credit Risk Scoring API',
+    description=(
+        'Predicts probability of loan default using XGBoost trained on the '
+        'German Credit dataset. Risk scores 0-100, risk bands '
+        'Low/Medium/High/Very High.'
+    ),
+    version='1.0.0',
+    docs_url='/docs',
+    redoc_url='/redoc',
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
+templates = Jinja2Templates(directory='templates')
+
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+class CreditApplication(BaseModel):
+    """Input features for credit risk scoring."""
+    duration: int = Field(..., description='Loan duration in months', ge=1, le=120)
+    credit_amount: float = Field(..., description='Loan amount in DM', ge=0)
+    installment_commitment: int = Field(..., description='Installment rate as % of income', ge=1, le=4)
+    age: int = Field(..., description='Applicant age in years', ge=18, le=100)
+    existing_credits: int = Field(..., description='Number of existing credits at this bank', ge=0, le=4)
+    checking_status: str = Field(..., description="Checking account status: 'no checking', '<0', '0<=X<200', '>=200'")
+    credit_history: str = Field(..., description="Credit history: 'no credits/all paid', 'all paid', 'existing paid', 'delayed previously', 'critical/other existing credit'")
+    purpose: str = Field(..., description="Loan purpose: 'new car', 'used car', 'furniture/equipment', 'radio/tv', 'domestic appliance', 'repairs', 'education', 'retraining', 'business', 'other'")
+    savings_status: str = Field(..., description="Savings account status: 'no known savings', '<100', '100<=X<500', '500<=X<1000', '>=1000'")
+    employment: str = Field(..., description="Employment duration: 'unemployed', '<1', '1<=X<4', '4<=X<7', '>=7'")
+
+
+class RiskScore(BaseModel):
+    """Credit risk assessment output."""
+    probability_of_default: float
+    risk_score: int
+    risk_band: str
+    decision: str
+    risk_factors: list[str]
+    protective_factors: list[str]
+    model_used: str
+    shap_values_raw: dict
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def get_risk_band(probability: float) -> dict:
+    for (low, high), info in RISK_BANDS.items():
+        if low <= probability < high:
+            return info
+    return {'band': 'Very High', 'label': 'Decline', 'colour': '#C0392B'}
+
+
+def score_application(application: CreditApplication) -> RiskScore:
+    if not MODEL_LOADED:
+        raise HTTPException(status_code=503, detail='Model not loaded')
+
+    input_data = {
+        'duration': application.duration,
+        'credit_amount': application.credit_amount,
+        'installment_commitment': application.installment_commitment,
+        'age': application.age,
+        'existing_credits': application.existing_credits,
+        'checking_status': application.checking_status,
+        'credit_history': application.credit_history,
+        'purpose': application.purpose,
+        'savings_status': application.savings_status,
+        'employment': application.employment,
+        'residence_since': 3,
+        'num_dependents': 1,
+        'personal_status': 'male single',
+        'other_parties': 'none',
+        'property_magnitude': 'real estate',
+        'other_payment_plans': 'none',
+        'housing': 'own',
+        'job': 'skilled',
+        'own_telephone': 'yes',
+        'foreign_worker': 'yes',
+    }
+
+    df_input = pd.DataFrame([input_data])
+    X_transformed = pipeline.named_steps['preprocessor'].transform(df_input)
+
+    probability = float(pipeline.predict_proba(df_input)[0][1])
+    risk_score = int(probability * 100)
+    band_info = get_risk_band(probability)
+
+    shap_vals_obj = shap_explainer(X_transformed)
+    shap_vals = shap_vals_obj.values[0] if hasattr(shap_vals_obj, 'values') else shap_vals_obj[0]
+
+    risk_factors, protective_factors = shap_values_to_risk_factors(
+        shap_vals.tolist(), feature_names, top_n=3,
+    )
+
+    shap_raw = {name: round(float(val), 4)
+                for name, val in zip(feature_names, shap_vals)}
+
+    return RiskScore(
+        probability_of_default=round(probability, 4),
+        risk_score=risk_score,
+        risk_band=band_info['band'],
+        decision=band_info['label'],
+        risk_factors=risk_factors,
+        protective_factors=protective_factors,
+        model_used=model_name,
+        shap_values_raw=shap_raw,
+    )
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.get('/')
+def root():
+    return {
+        'message': 'Credit Risk Scoring API',
+        'docs': '/docs',
+        'health': '/health',
+    }
+
+
+@app.get('/health')
+def health():
+    return {
+        'status': 'ok',
+        'model_loaded': MODEL_LOADED,
+        'model_name': model_name,
+    }
+
+
+@app.get('/demo', response_class=HTMLResponse)
+def demo(request: Request):
+    return templates.TemplateResponse('index.html', {'request': request})
+
+
+@app.post('/score', response_model=RiskScore)
+def score(application: CreditApplication):
+    """
+    Score a credit application and return a risk assessment.
+
+    Example request:
+    {
+      "duration": 24,
+      "credit_amount": 5000,
+      "installment_commitment": 3,
+      "age": 35,
+      "existing_credits": 1,
+      "checking_status": "0<=X<200",
+      "credit_history": "existing paid",
+      "purpose": "new car",
+      "savings_status": "<100",
+      "employment": "1<=X<4"
+    }
+    """
+    return score_application(application)
+
+
+@app.post('/score/batch', response_model=list[RiskScore])
+def score_batch(applications: list[CreditApplication]):
+    """
+    Score up to 100 credit applications in a single request.
+
+    Returns a list of risk assessments in the same order as the input.
+    Useful for bulk loan decisioning workflows.
+    """
+    if len(applications) > 100:
+        raise HTTPException(status_code=400, detail='Maximum 100 applications per batch')
+    return [score_application(app) for app in applications]
+
+
+@app.get('/api/model-info')
+def model_info():
+    return {
+        'primary_metric': 'cost_weighted_score',
+        'models': model_metrics,
+    }
+
+
+@app.get('/api/feature-importance')
+def feature_importance():
+    return shap_feature_importance
+
+
+@app.get('/api/risk-bands')
+def risk_bands():
+    return [
+        {
+            'min': low,
+            'max': high,
+            'band': info['band'],
+            'label': info['label'],
+            'colour': info['colour'],
+        }
+        for (low, high), info in RISK_BANDS.items()
+    ]

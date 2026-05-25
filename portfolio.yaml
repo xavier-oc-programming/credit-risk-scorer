@@ -1,0 +1,59 @@
+title: Credit Risk Scoring API — XGBoost, MLflow, FastAPI
+slug: credit-risk-scorer
+category: data
+date: 2026-05-24
+featured: false
+tags: machine-learning, classification, xgboost, shap, explainability, mlflow, web-app, deployment, azure, docker, CI-CD, tabular-data, feature-engineering, benchmarking, jupyter, REST-API
+tech_stack: Python, XGBoost, scikit-learn, SHAP, MLflow, FastAPI, Uvicorn, Docker, Docker Compose, Pandas, NumPy, Matplotlib, Seaborn, Gunicorn, Azure App Service, GitHub Actions, pytest
+repo_url: https://github.com/xavier-oc-programming/credit-risk-scorer
+live_url: https://credit-risk-scorer.azurewebsites.net
+demo_url: https://credit-risk-scorer.azurewebsites.net/docs
+short_description: |
+  Credit risk scoring API predicting loan default probability on the German
+  Credit dataset. XGBoost trained with MLflow experiment tracking, served
+  via FastAPI with auto-generated OpenAPI docs. Risk score 0-100 with
+  plain-English SHAP explanations. Deployed on Azure App Service.
+full_description: |
+  A production-grade credit risk scoring API trained on the German Credit
+  dataset (1,000 applicants, 20 features). Three classifiers are compared —
+  Logistic Regression, Random Forest, and XGBoost — with every training run
+  tracked in MLflow including hyperparameters, metrics, and model artefacts.
+  Model selection uses a cost-weighted score that reflects the asymmetric
+  business cost of credit lending: approving a bad loan costs 5x more than
+  rejecting a good one.
+
+  The winning model is served via FastAPI — chosen over Flask for its
+  API-first design, Pydantic input validation, and auto-generated OpenAPI
+  documentation at /docs. Every prediction returns a risk score (0-100),
+  risk band (Low/Medium/High/Very High), business decision (Approve/Review/
+  Decline), and plain-English SHAP explanations of the factors driving the
+  score — legally relevant in jurisdictions requiring adverse action notices.
+
+  The project runs locally via Docker Compose with two services: the scoring
+  API on port 8000 and the MLflow tracking server on port 5000. A GitHub
+  Actions CI pipeline runs pytest on every push to main.
+
+problem: |
+  Demonstrating a complete ML API lifecycle — experiment tracking, model
+  selection by business metric, API-first serving with input validation,
+  multi-container local development, and CI testing — in a finance domain
+  where explainability is a legal requirement, not just a nice-to-have.
+
+solution: |
+  XGBoost pipeline (ColumnTransformer preprocessor + classifier) selected
+  by cost-weighted score across three MLflow-tracked training runs. FastAPI
+  serves POST /score and POST /score/batch with Pydantic validation and SHAP
+  explanations via risk_explainer.py. Docker Compose runs API + MLflow server.
+  GitHub Actions runs pytest on every push.
+
+challenges: |
+  Class imbalance (70/30 good/bad) requires explicit handling via
+  class_weight and scale_pos_weight — accuracy alone is misleading.
+  The cost-weighted evaluation metric must be defined and implemented
+  manually as sklearn has no built-in support for asymmetric error costs.
+  FastAPI's ASGI architecture requires gunicorn with UvicornWorker on
+  Azure App Service rather than standard gunicorn used for Flask.
+
+results: |
+  TBD — populate after running train.py. Include: XGBoost cost-weighted
+  score vs baselines, ROC-AUC, precision/recall on the bad credit class.

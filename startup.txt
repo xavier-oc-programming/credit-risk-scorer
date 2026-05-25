@@ -1,0 +1,6 @@
+gunicorn main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 600
+
+# Azure App Service requires gunicorn as the process manager.
+# UvicornWorker makes gunicorn serve an ASGI app (FastAPI).
+# This is the FastAPI equivalent of the Flask gunicorn command used
+# in previous projects.
