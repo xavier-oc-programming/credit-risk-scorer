@@ -49,7 +49,11 @@ PLOTS_DIR.mkdir(exist_ok=True)
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 print('Loading German Credit dataset...')
-data = fetch_openml('credit-g', version=1, as_frame=True)
+# parser='pandas' uses pandas to parse the ARFF file instead of the default
+# liac-arff parser — significantly faster on sklearn 1.3+.
+# The dataset is cached in ~/scikit_learn_data/ after the first download,
+# so subsequent runs are instant regardless of network speed.
+data = fetch_openml('credit-g', version=1, as_frame=True, parser='pandas')
 df = data.frame
 
 print(f'Dataset shape: {df.shape}')
