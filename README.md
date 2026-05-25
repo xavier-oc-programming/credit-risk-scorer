@@ -1,6 +1,6 @@
 # credit-risk-scorer
 
-Credit risk scoring API trained on the German Credit dataset. Predicts loan default probability using XGBoost, tracked with MLflow, served via FastAPI. Every prediction includes a plain-English explanation of the factors driving the risk score. Deployed on Azure App Service.
+Credit risk scoring API trained on the German Credit dataset. Predicts loan default probability using Logistic Regression, tracked with MLflow, served via FastAPI. Every prediction includes a plain-English explanation of the factors driving the risk score. Deployed on Azure App Service.
 
 **Live demo → [credit-risk-scorer.azurewebsites.net](https://credit-risk-scorer.azurewebsites.net)**
 &nbsp;&nbsp;·&nbsp;&nbsp;
@@ -9,7 +9,7 @@ Credit risk scoring API trained on the German Credit dataset. Predicts loan defa
 **Notebook → [notebook.ipynb](notebook.ipynb)**
 
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
-![XGBoost](https://img.shields.io/badge/XGBoost-2.0-orange)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3-F7931E?logo=scikitlearn&logoColor=white)
 ![MLflow](https://img.shields.io/badge/MLflow-2.10-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
@@ -89,7 +89,7 @@ credit-risk-scorer/
 ├── .gitignore
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # GitHub Actions CI
+│       └── ci.yml             # GitHub Actions CI/CD
 ├── templates/
 │   └── index.html             # Minimal demo frontend
 ├── tests/
@@ -192,8 +192,6 @@ mlflow ui --host 0.0.0.0 --port 5000
 # Or via Docker Compose — it starts automatically with docker-compose up
 ```
 
-MLflow UI screenshot — *add after running train.py*
-
 ---
 
 ## 8. API Reference
@@ -235,7 +233,7 @@ Score a single credit application.
   "protective_factors": [
     "existing credits paid on time reduces default risk"
   ],
-  "model_used": "XGBoost",
+  "model_used": "LogisticRegression",
   "shap_values_raw": { "duration": 0.1823, "credit_amount": 0.0912, "..." : "..." }
 }
 ```
@@ -247,7 +245,7 @@ Score up to 100 applications in a single request. Accepts a JSON array, returns 
 ### `GET /health`
 
 ```json
-{ "status": "ok", "model_loaded": true, "model_name": "XGBoost" }
+{ "status": "ok", "model_loaded": true, "model_name": "LogisticRegression" }
 ```
 
 ### `GET /api/model-info`
